@@ -1,0 +1,24 @@
+{
+  "identifier": "desktop-capability",
+  "platforms": [
+    "macOS",
+    "windows",
+    "linux"
+  ],
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "cli:default",
+    "fs:default",
+    "core:path:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$APPCACHE/*"
+        }
+      ]
+    }
+  ]
+}
