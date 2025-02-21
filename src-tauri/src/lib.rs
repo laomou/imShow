@@ -42,7 +42,8 @@ pub fn run() {
                                 if let Some(path) = item.as_str() {
                                     let src_file = Path::new(path);
                                     if src_file.is_file() && src_file.exists() {
-                                        let extension = src_file.extension().unwrap().to_str().unwrap();
+                                        let extension =
+                                            src_file.extension().unwrap().to_str().unwrap();
                                         let file_name = format!("{}.{}", count, extension);
                                         let dest_file = cache_dir.join(&file_name);
                                         if extension == "png"
