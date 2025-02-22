@@ -15,7 +15,6 @@ let app = null
 let blockRects = []
 let blockViews = []
 let selectedBlockIndex = -1
-let tmpCmpSprite = null
 let isDragging = false
 let dragStart = { x: 0, y: 0 }
 
@@ -35,26 +34,13 @@ const handleRotateLeft = () => {
 
 const handleCmpDown = () => {
     if (selectedBlockIndex != -1) {
-        blockViews[0].sprite.visible = false
-        if (tmpCmpSprite) {
-            tmpCmpSprite.destroy()
-        }
-        tmpCmpSprite = new PIXI.Sprite(blockViews[selectedBlockIndex].sprite.texture)
-        tmpCmpSprite.scale.set(blockViews[selectedBlockIndex].sprite.scale.x, blockViews[selectedBlockIndex].sprite.scale.y)
-        tmpCmpSprite.angle = blockViews[selectedBlockIndex].sprite.angle
-        tmpCmpSprite.x = blockViews[selectedBlockIndex].sprite.x
-        tmpCmpSprite.y = blockViews[selectedBlockIndex].sprite.y
-        tmpCmpSprite.width = blockViews[selectedBlockIndex].sprite.width
-        tmpCmpSprite.height = blockViews[selectedBlockIndex].sprite.height
-        tmpCmpSprite.anchor.set(0.5)
-        blockViews[0].container.addChild(tmpCmpSprite)
+        blockViews[0].update(blockViews[selectedBlockIndex].sprite)
     }
 }
 
 const handleCmpUp = () => {
     if (selectedBlockIndex != -1) {
-        blockViews[0].container.removeChild(tmpCmpSprite)
-        blockViews[0].sprite.visible = true
+        blockViews[0].restore()
     }
 }
 
@@ -209,35 +195,37 @@ class Toolbar {
 }
 
 class Histogram {
-    constructor(rootview, imgData, width = 256, height = 100) {
-        this.imgData = imgData
+    constructor(texture, width = 256, height = 100) {
+        this.texture = texture
         this.mode = "rgb"
         this.viewWidth = width
         this.viewHeight = height
 
-        this.container = new PIXI.Container()
-        this.container.x = 0
-        this.container.y = 0
-        this.container.zIndex = 100
+        this.view = new PIXI.Container()
+        this.view.x = 0
+        this.view.y = 0
+        this.view.zIndex = 100
         this.hitArea = new PIXI.Rectangle(0, 0, this.viewWidth, this.viewHeight)
-        this.container.hitArea = this.hitArea
-        this.container.interactive = true
-        this.container.on('pointerdown', this.toggleMode, this)
-        rootview.addChild(this.container)
+        this.view.hitArea = this.hitArea
+        this.view.interactive = true
+        this.view.on('pointerdown', this.toggleMode, this)
+
+        this.histogramGraphics = new PIXI.Graphics()
+        this.view.addChild(this.histogramGraphics)
+
+        this.update(this.texture)
     }
 
     toggleMode() {
         this.mode = this.mode === 'rgb' ? 'gray' : 'rgb'
-        this.update()
+        this.update(this.texture)
     }
 
-    initLayout() {
-        this.histogramGraphics = new PIXI.Graphics()
-        this.container.addChild(this.histogramGraphics)
-        this.update()
-    }
+    update(texture) {
+        const canvas = texture.baseTexture.resource
+        const context = canvas.getContext('2d')
+        const imgData = context.getImageData(0, 0, canvas.width, canvas.height)
 
-    update() {
         const histogram = {
             r: new Array(256).fill(0),
             g: new Array(256).fill(0),
@@ -245,10 +233,10 @@ class Histogram {
             gray: new Array(256).fill(0)
         }
 
-        for (let i = 0; i < this.imgData.data.length; i += 4) {
-            const r = this.imgData.data[i]
-            const g = this.imgData.data[i + 1]
-            const b = this.imgData.data[i + 2]
+        for (let i = 0; i < imgData.data.length; i += 4) {
+            const r = imgData.data[i]
+            const g = imgData.data[i + 1]
+            const b = imgData.data[i + 2]
             const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
 
             histogram.r[r]++
@@ -332,6 +320,26 @@ class Viewport {
         this.border.visible = !this.border.visible
     }
 
+    update(sprite) {
+        this.sprite.visible = false
+        this.tmpSprite = new PIXI.Sprite(sprite.texture)
+        this.tmpSprite.scale.set(sprite.scale.x, sprite.scale.y)
+        this.tmpSprite.angle = sprite.angle
+        this.tmpSprite.x = sprite.x
+        this.tmpSprite.y = sprite.y
+        this.tmpSprite.width = sprite.width
+        this.tmpSprite.height = sprite.height
+        this.tmpSprite.anchor.set(0.5)
+        this.container.addChild(this.tmpSprite)
+        this.histogram.update(sprite.texture)
+    }
+
+    restore() {
+        this.container.removeChild(this.tmpSprite)
+        this.sprite.visible = true
+        this.histogram.update(this.sprite.texture)
+    }
+
     initLayout() {
         const blob = new Blob([this.imgBlob.blob], { type: `image/${this.imgBlob.type}` })
         const uri = URL.createObjectURL(blob)
@@ -348,12 +356,8 @@ class Viewport {
             this.sprite.angle = 0
             this.container.addChild(this.sprite)
 
-            const canvas = texture.baseTexture.resource
-            const context = canvas.getContext('2d')
-            const imgData = context.getImageData(0, 0, canvas.width, canvas.height)
-
-            const histogram = new Histogram(this.container, imgData)
-            histogram.initLayout()
+            this.histogram = new Histogram(texture)
+            this.container.addChild(this.histogram.view)
         }
     }
 }
