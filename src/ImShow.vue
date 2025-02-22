@@ -123,12 +123,16 @@ const handleWheel = (event, scaleFactor = 1.1) => {
     if (wheelBlockIndex != -1) {
         const newScaleX = blockViews[wheelBlockIndex].sprite.scale.x * scaleChange
         const newScaleY = blockViews[wheelBlockIndex].sprite.scale.y * scaleChange
-        blockViews[wheelBlockIndex].sprite.scale.set(newScaleX, newScaleY)
+        if (newScaleX >= blockViews[wheelBlockIndex].initScale || newScaleY >= blockViews[wheelBlockIndex].initScale) {
+            blockViews[wheelBlockIndex].sprite.scale.set(newScaleX, newScaleY)
+        }
     } else {
         blockViews.forEach((blockView) => {
             const newScaleX = blockView.sprite.scale.x * scaleChange
             const newScaleY = blockView.sprite.scale.y * scaleChange
-            blockView.sprite.scale.set(newScaleX, newScaleY)
+            if (newScaleX >= blockView.initScale || newScaleY >= blockView.initScale) {
+                blockView.sprite.scale.set(newScaleX, newScaleY)
+            }
         })
     }
 }
