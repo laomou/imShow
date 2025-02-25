@@ -1,10 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue"
-import { invoke } from "@tauri-apps/api/core"
+import { convertFileSrc, invoke } from "@tauri-apps/api/core"
 import ImShow from "./ImShow.vue"
 import { readFile, BaseDirectory } from '@tauri-apps/plugin-fs'
 
-const imgBlobs = ref([])
+const imgSrcs = ref([])
 
 const handleKeydown = (event) => {
   if (event.key === 'Escape') {
@@ -13,9 +13,9 @@ const handleKeydown = (event) => {
 }
 
 const loadImgBlobs = async () => {
-  const imgNames = await invoke('get_image_names');
-  imgBlobs.value = await Promise.all(imgNames.map(async (name) => {
-    return { blob: await readFile(`${name}`, { baseDir: BaseDirectory.AppCache }), type: name.split('.').pop() }
+  const imgPaths = await invoke('get_image_paths');
+  imgSrcs.value = await Promise.all(imgPaths.map(async (path) => {
+    return convertFileSrc(path)
   }))
 }
 
@@ -32,7 +32,7 @@ onUnmounted(() => {
 
 <template>
   <main class="container">
-    <ImShow :imgBlobs="imgBlobs"></ImShow>
+    <ImShow :imgSrcs="imgSrcs"></ImShow>
   </main>
 </template>
 
