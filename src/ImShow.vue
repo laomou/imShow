@@ -1,10 +1,10 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from "vue"
+import { ref, onMounted, onUnmounted } from "vue"
 import * as PIXI from "pixi.js"
 import { Button } from '@pixi/ui'
 
 const props = defineProps({
-    imgBlobs: {
+    imgSrcs: {
         type: Array,
         required: true
     }
@@ -287,8 +287,8 @@ class Histogram {
 }
 
 class Viewport {
-    constructor(app, imgBlob, viewRect) {
-        this.imgBlob = imgBlob
+    constructor(app, imgSrc, viewRect) {
+        this.imgSrc = imgSrc
         this.viewRect = viewRect
         this.initScale = 1
 
@@ -360,10 +360,9 @@ class Viewport {
     }
 
     initLayout() {
-        const blob = new Blob([this.imgBlob.blob], { type: `image/${this.imgBlob.type}` })
-        const uri = URL.createObjectURL(blob)
         const img = new Image()
-        img.src = uri
+        img.src = this.imgSrc
+        img.crossOrigin = "anonymous"
         img.onload = () => {
             const texture = PIXI.Texture.from(img)
             this.sprite = new PIXI.Sprite(texture)
@@ -404,25 +403,23 @@ function calculateBlockRects(canvasWidth, canvasHeight, numBlocks, paddingX = 4,
     return blocks
 }
 
-const initLayout = async (imgBlobs) => {
+const initLayout = async (imgSrcs) => {
     const toolbar = new Toolbar(app)
-    toolbar.initLayout(imgBlobs.length > 1)
-    blockRects = calculateBlockRects(app.canvas.width, app.canvas.height, imgBlobs.length)
-    imgBlobs.forEach((imgBlob, index) => {
-        const viewport = new Viewport(app, imgBlob, blockRects[index])
+    toolbar.initLayout(imgSrcs.length > 1)
+    blockRects = calculateBlockRects(app.canvas.width, app.canvas.height, imgSrcs.length)
+    imgSrcs.forEach((imgSrc, index) => {
+        const viewport = new Viewport(app, imgSrc, blockRects[index])
         blockViews.push(viewport)
         viewport.initLayout()
     })
 }
 
-watch(() => props.imgBlobs, (imgBlobs) => {
-    initLayout(imgBlobs)
-})
-
 const initPIXIApp = async () => {
     app = new PIXI.Application()
     await app.init({ background: "#ffffff", resizeTo: window })
     pixiContainer.value.appendChild(app.canvas)
+
+    initLayout(props.imgSrcs)
 
     app.canvas.oncontextmenu = (event) => {
         return false
