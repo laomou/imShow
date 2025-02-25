@@ -22,6 +22,12 @@ const isMouseInBlock = (x, y, blockRect) => {
     return x >= blockRect.x && x <= blockRect.x + blockRect.width && y >= blockRect.y && y <= blockRect.y + blockRect.height
 }
 
+const handleFlipHorizontal = () => {
+    if (selectedBlockIndex != -1) {
+        blockViews[selectedBlockIndex].flip_h()
+    }
+}
+
 const handleRotateLeft = () => {
     if (selectedBlockIndex != -1) {
         blockViews[selectedBlockIndex].rotate(-90)
@@ -155,8 +161,9 @@ class Toolbar {
         PIXI.Assets.add({ alias: 'reset', src: 'src/assets/reset.png' })
         PIXI.Assets.add({ alias: 'left-cmp', src: 'src/assets/left-cmp.png' })
         PIXI.Assets.add({ alias: 'rotate-right', src: 'src/assets/rotate-right.png' })
+        PIXI.Assets.add({ alias: 'flip-h', src: 'src/assets/flip-horizontal.png' })
 
-        const textures = await PIXI.Assets.load(['rotate-left', 'left-cmp', 'reset', 'rotate-right'])
+        const textures = await PIXI.Assets.load(['rotate-left', 'left-cmp', 'reset', 'rotate-right', 'flip-h'])
         this.addButton(textures['rotate-left'], () => {
             handleRotateLeft()
         })
@@ -173,6 +180,9 @@ class Toolbar {
         })
         this.addButton(textures['rotate-right'], () => {
             handleRotateRight()
+        })
+        this.addButton(textures['flip-h'], () => {
+            handleFlipHorizontal()
         })
     }
 
@@ -301,6 +311,11 @@ class Viewport {
         this.border.endFill()
         this.border.visible = false
         this.container.addChild(this.border)
+    }
+
+    flip_h() {
+        this.sprite.scale.x = -this.sprite.scale.x
+        this.sprite.x = this.viewRect.width - this.sprite.x
     }
 
     rotate(angle) {
