@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUpdated, onUnmounted, watch } from "vue"
+import { ref, onMounted, onUnmounted, watch } from "vue"
 import * as PIXI from "pixi.js"
 import { Button } from '@pixi/ui'
 
@@ -76,7 +76,7 @@ const handleDoubleClick = (event) => {
         return
     }
     const index = blockRects.findIndex((blockRect) => isMouseInBlock(event.clientX, event.clientY, blockRect))
-    if (index >= 1) {
+    if (index >= 1 && index < blockViews.length) {
         if (selectedBlockIndex === index) {
             blockViews[index].toggleBorder()
             selectedBlockIndex = -1
