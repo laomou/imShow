@@ -161,11 +161,11 @@ class Toolbar {
     }
 
     async initLayout(hasCmp = false) {
-        PIXI.Assets.add({ alias: 'rotate-left', src: 'src/assets/rotate-left.png' })
-        PIXI.Assets.add({ alias: 'reset', src: 'src/assets/reset.png' })
-        PIXI.Assets.add({ alias: 'left-cmp', src: 'src/assets/left-cmp.png' })
-        PIXI.Assets.add({ alias: 'rotate-right', src: 'src/assets/rotate-right.png' })
-        PIXI.Assets.add({ alias: 'flip-h', src: 'src/assets/flip-horizontal.png' })
+        PIXI.Assets.add({ alias: 'rotate-left', src: 'src/assets/rotate-left.svg' })
+        PIXI.Assets.add({ alias: 'reset', src: 'src/assets/reset.svg' })
+        PIXI.Assets.add({ alias: 'left-cmp', src: 'src/assets/left-cmp.svg' })
+        PIXI.Assets.add({ alias: 'rotate-right', src: 'src/assets/rotate-right.svg' })
+        PIXI.Assets.add({ alias: 'flip-h', src: 'src/assets/flip-horizontal.svg' })
 
         const textures = await PIXI.Assets.load(['rotate-left', 'left-cmp', 'reset', 'rotate-right', 'flip-h'])
         this.addButton(textures['rotate-left'], () => {
