@@ -18,6 +18,7 @@ let blockViews = []
 let selectedBlockIndex = -1
 let isDragging = false
 let dragStart = { x: 0, y: 0 }
+let animationFrameId = null
 
 const isMouseInBlock = (x, y, blockRect) => {
     return x >= blockRect.x && x <= blockRect.x + blockRect.width && y >= blockRect.y && y <= blockRect.y + blockRect.height
@@ -121,15 +122,21 @@ const handleMouseDown = (event) => {
 
 const handleMouseMove = (event) => {
     if (isDragging) {
-        const dragEnd = { x: event.clientX, y: event.clientY }
-        const offsetX = dragEnd.x - dragStart.x
-        const offsetY = dragEnd.y - dragStart.y
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId)
+        }
+        animationFrameId = requestAnimationFrame(() => {
+            const dragEnd = { x: event.clientX, y: event.clientY }
+            const offsetX = dragEnd.x - dragStart.x
+            const offsetY = dragEnd.y - dragStart.y
 
-        blockViews.forEach((blockView) => {
-            blockView.move(offsetX, offsetY)
+            blockViews.forEach((blockView) => {
+                blockView.move(offsetX, offsetY)
+            })
+
+            dragStart = dragEnd
+            animationFrameId = null
         })
-
-        dragStart = dragEnd
     }
 }
 
@@ -143,14 +150,10 @@ const handleWheel = (event, scaleFactor = 1.1) => {
 
     let wheelBlockIndex = -1
     if (event.ctrlKey) {
-        let index = blockRects.findIndex((blockRect) => isMouseInBlock(event.clientX, event.clientY, blockRect))
-        if (index != -1) {
-            wheelBlockIndex = index
-        }
+        wheelBlockIndex = blockRects.findIndex((blockRect) => isMouseInBlock(event.clientX, event.clientY, blockRect))
     }
 
-    if (wheelBlockIndex != -1) {
-        const blockView = blockViews[wheelBlockIndex]
+    const scaleBlockView = (blockView) => {
         const newScaleX = blockView.sprite.scale.x * scaleChange
         const newScaleY = blockView.sprite.scale.y * scaleChange
         if (newScaleX >= blockView.initScale || newScaleY >= blockView.initScale) {
@@ -160,18 +163,12 @@ const handleWheel = (event, scaleFactor = 1.1) => {
             blockView.sprite.y = centerY + (blockView.sprite.y - centerY) * scaleChange
             blockView.sprite.scale.set(newScaleX, newScaleY)
         }
+    }
+
+    if (wheelBlockIndex != -1) {
+        scaleBlockView(blockViews[wheelBlockIndex])
     } else {
-        blockViews.forEach((blockView) => {
-            const newScaleX = blockView.sprite.scale.x * scaleChange
-            const newScaleY = blockView.sprite.scale.y * scaleChange
-            if (newScaleX >= blockView.initScale || newScaleY >= blockView.initScale) {
-                const centerX = blockView.viewRect.width / 2
-                const centerY = blockView.viewRect.height / 2
-                blockView.sprite.x = centerX + (blockView.sprite.x - centerX) * scaleChange
-                blockView.sprite.y = centerY + (blockView.sprite.y - centerY) * scaleChange
-                blockView.sprite.scale.set(newScaleX, newScaleY)
-            }
-        })
+        blockViews.forEach(scaleBlockView)
     }
 }
 
@@ -307,8 +304,8 @@ class Histogram {
     }
 
     update(texture) {
-        const canvas = texture.baseTexture.resource
-        const context = canvas.getContext('2d')
+        const canvas = texture.source.resource
+        const context = canvas.getContext('2d', { willReadFrequently: true })
         const imgData = context.getImageData(0, 0, canvas.width, canvas.height)
 
         const histogram = {
@@ -383,7 +380,7 @@ class Viewport {
         this.border.visible = false
         this.container.addChild(this.border)
 
-        this.exif = new PIXI.HTMLText('', { fill: 0x00ff00, fontSize: 16 })
+        this.exif = new PIXI.Text('', {fill: 0x00ff00, fontSize: 16 })
         this.exif.x = 5
         this.exif.y = 130
         this.exif.visible = false
@@ -464,8 +461,8 @@ class Viewport {
     async readExif(img) {
         try {
             const exifData = await exifr.parse(img)
-            let exifInfo = ''
             if (exifData) {
+                let exifInfo = ''
                 if (exifData.ExposureTime) {
                     const exposureTime = exifData.ExposureTime < 1
                         ? `1/${Math.round(1 / exifData.ExposureTime)}`
@@ -475,6 +472,9 @@ class Viewport {
                 if (exifData.FNumber) exifInfo += `f/${exifData.FNumber}\n`
                 if (exifData.ISO) exifInfo += `ISO ${exifData.ISO}\n`
                 if (exifData.FocalLength) exifInfo += `${Math.round(exifData.FocalLength)} mm\n`
+                exifInfo += '\n'
+                if (exifData.Model) exifInfo += `${exifData.Model}\n`
+                if (exifData.Make) exifInfo += `${exifData.Make}\n`
                 this.exif.text = exifInfo
             } else {
                 this.exif.text = 'No EXIF data found'
@@ -533,7 +533,7 @@ function calculateBlockRects(canvasWidth, canvasHeight, numBlocks, paddingX = 4,
 
 const initLayout = async (imgSrcs) => {
     const toolbar = new Toolbar(app)
-    toolbar.initLayout(imgSrcs.length > 1)
+    await toolbar.initLayout(imgSrcs.length > 1)
     blockRects = calculateBlockRects(app.canvas.width, app.canvas.height, imgSrcs.length)
     imgSrcs.forEach((imgSrc, index) => {
         const viewport = new Viewport(app, imgSrc, blockRects[index])
@@ -547,7 +547,7 @@ const initPIXIApp = async () => {
     await app.init({ background: "#FFFFFF", resizeTo: window })
     pixiContainer.value.appendChild(app.canvas)
 
-    initLayout(props.imgSrcs)
+    await initLayout(props.imgSrcs)
 
     app.canvas.oncontextmenu = (event) => {
         return false
@@ -572,6 +572,9 @@ onUnmounted(() => {
         app.canvas.removeEventListener('mousemove', handleMouseMove)
         app.canvas.removeEventListener('mouseup', handleMouseUp)
         app.destroy()
+    }
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
     }
 })
 
