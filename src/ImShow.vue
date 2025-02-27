@@ -25,6 +25,10 @@ const isMouseInBlock = (x, y, blockRect) => {
 const handleFlipHorizontal = () => {
     if (selectedBlockIndex != -1) {
         blockViews[selectedBlockIndex].flip_h()
+    } else {
+        blockViews.forEach((blockView) => {
+            blockView.flip_h()
+        })
     }
 }
 
