@@ -1,7 +1,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue"
 import * as PIXI from "pixi.js"
-import { Button } from '@pixi/ui'
+import { Button, CheckBox } from '@pixi/ui'
+import exifr from 'exifr'
 
 const props = defineProps({
     imgSrcs: {
@@ -20,6 +21,24 @@ let dragStart = { x: 0, y: 0 }
 
 const isMouseInBlock = (x, y, blockRect) => {
     return x >= blockRect.x && x <= blockRect.x + blockRect.width && y >= blockRect.y && y <= blockRect.y + blockRect.height
+}
+
+const toggleExif = () => {
+    blockViews.forEach((blockView) => {
+        blockView.toggleExif()
+    })
+}
+
+const toggleHistogram = () => {
+    blockViews.forEach((blockView) => {
+        blockView.toggleHistogram()
+    })
+}
+
+const toggleCenterMark = () => {
+    blockViews.forEach((blockView) => {
+        blockView.toggleCenterMark()
+    })
 }
 
 const handleFlipHorizontal = () => {
@@ -148,16 +167,18 @@ const handleWheel = (event, scaleFactor = 1.1) => {
 }
 
 class Toolbar {
-    constructor(app, spacing = 4) {
+    constructor(app) {
         this.container = new PIXI.Container()
         this.container.x = 0
         this.container.y = 0
         this.container.zIndex = 90
+        this.container.visible = false
         app.stage.addChild(this.container)
 
         this.viewWidth = app.canvas.width
-        this.spacing = spacing
-        this.realWidth = 0
+        this.centerX = this.viewWidth / 2
+        this.buttons = []
+        this.checkboxs = []
     }
 
     async initLayout(hasCmp = false) {
@@ -166,49 +187,86 @@ class Toolbar {
         PIXI.Assets.add({ alias: 'left-cmp', src: 'src/assets/left-cmp.svg' })
         PIXI.Assets.add({ alias: 'rotate-right', src: 'src/assets/rotate-right.svg' })
         PIXI.Assets.add({ alias: 'flip-h', src: 'src/assets/flip-horizontal.svg' })
+        PIXI.Assets.add({ alias: 'switch-off', src: 'src/assets/switch-off.svg' })
+        PIXI.Assets.add({ alias: 'switch-on', src: 'src/assets/switch-on.svg' })
 
-        const textures = await PIXI.Assets.load(['rotate-left', 'left-cmp', 'reset', 'rotate-right', 'flip-h'])
-        this.addButton(textures['rotate-left'], () => {
+        const btnTextures = await PIXI.Assets.load(['rotate-left', 'left-cmp', 'reset', 'rotate-right', 'flip-h'])
+        this.addButton(btnTextures['rotate-left'], () => {
             handleRotateLeft()
         })
         if (hasCmp) {
-            this.addButton(textures['left-cmp'], () => {
+            this.addButton(btnTextures['left-cmp'], () => {
             }, () => {
                 handleCmpDown()
             }, () => {
                 handleCmpUp()
             })
         }
-        this.addButton(textures['reset'], () => {
+        this.addButton(btnTextures['reset'], () => {
             handleReset()
         })
-        this.addButton(textures['rotate-right'], () => {
+        this.addButton(btnTextures['rotate-right'], () => {
             handleRotateRight()
         })
-        this.addButton(textures['flip-h'], () => {
+        this.addButton(btnTextures['flip-h'], () => {
             handleFlipHorizontal()
         })
+        const cbxTextures = await PIXI.Assets.load(['switch-off', 'switch-on'])
+        this.addCheckBox('E', cbxTextures['switch-off'], cbxTextures['switch-on'], (checked) => {
+            toggleExif()
+        })
+        this.addCheckBox('H', cbxTextures['switch-off'], cbxTextures['switch-on'], (checked) => {
+            toggleHistogram()
+        })
+        this.addCheckBox('+', cbxTextures['switch-off'], cbxTextures['switch-on'], (checked) => {
+            toggleCenterMark()
+        })
+        this.updatePositions()
     }
 
-    addButton(texture, onPress, onDown = null, onUp = null, width = 25, height = 25) {
+    addButton(texture, onPress, onDown = null, onUp = null) {
         const sprite = new PIXI.Sprite(texture)
         const button = new Button(sprite)
-        button.view.width = width
-        button.view.height = height
-        button.view.x = this.realWidth
+        button.x = 0
+        button.y = 0
+        button.width = texture.width
+        button.height = texture.height
         this.container.addChild(button.view)
-
-        this.realWidth += width + this.spacing
+        this.buttons.push(button)
 
         onPress && button.onPress.connect(onPress)
         onDown && button.onDown.connect(onDown)
         onUp && button.onUp.connect(onUp)
-
-        this.updatePosition()
     }
 
-    updatePosition() {
-        this.container.x = (this.viewWidth - this.realWidth + this.spacing) / 2
+    addCheckBox(label, uncheckedTexture, checkedTexture, onChange) {
+        const checkbox = new CheckBox({
+            text: label,
+            style: {
+                unchecked: uncheckedTexture,
+                checked: checkedTexture,
+            }
+        })
+        checkbox.x = 0
+        checkbox.y = 0
+        this.container.addChild(checkbox)
+        this.checkboxs.push(checkbox)
+
+        onChange && checkbox.onChange.connect(onChange)
+    }
+
+    updatePositions(buttonWidth = 25, spacing = 8) {
+        const totalButtonWidth = this.buttons.length * (buttonWidth + spacing) - spacing
+        const buttonStartX = this.centerX - totalButtonWidth / 2
+        this.buttons.forEach((button, index) => {
+            button.view.x = buttonStartX + index * (button.width + spacing)
+            button.view.y = 0
+        })
+        this.checkboxs.forEach((checkbox, index) => {
+            checkbox.x = this.viewWidth - (index + 1) * (checkbox.width + spacing)
+            checkbox.y = 0
+        })
+        this.container.visible = true
     }
 }
 
@@ -315,6 +373,25 @@ class Viewport {
         this.border.endFill()
         this.border.visible = false
         this.container.addChild(this.border)
+
+        this.exif = new PIXI.HTMLText('', { fill: 0x00ff00, fontSize: 16 })
+        this.exif.x = 5
+        this.exif.y = 130
+        this.exif.visible = false
+        this.exif.zIndex = 100
+        this.container.addChild(this.exif)
+
+        this.centerMark = new PIXI.Graphics()
+        this.centerMark.beginFill(0xffffff)
+        this.centerMark.lineStyle(1, 0xff0000, 1)
+        this.centerMark.moveTo(this.viewRect.width / 2, this.viewRect.height / 2 - 10)
+        this.centerMark.lineTo(this.viewRect.width / 2, this.viewRect.height / 2 + 10)
+        this.centerMark.moveTo(this.viewRect.width / 2 - 10, this.viewRect.height / 2)
+        this.centerMark.lineTo(this.viewRect.width / 2 + 10, this.viewRect.height / 2)
+        this.centerMark.endFill()
+        this.centerMark.visible = false
+        this.centerMark.zIndex = 100
+        this.container.addChild(this.centerMark)
     }
 
     flip_h() {
@@ -343,6 +420,18 @@ class Viewport {
         this.border.visible = !this.border.visible
     }
 
+    toggleExif() {
+        this.exif.visible = !this.exif.visible
+    }
+
+    toggleHistogram() {
+        this.histogram.view.visible = !this.histogram.view.visible
+    }
+
+    toggleCenterMark() {
+        this.centerMark.visible = !this.centerMark.visible
+    }
+
     update(sprite) {
         this.sprite.visible = false
         this.tmpSprite = new PIXI.Sprite(sprite.texture)
@@ -363,6 +452,30 @@ class Viewport {
         this.histogram.update(this.sprite.texture)
     }
 
+    async readExif(img) {
+        try {
+            const exifData = await exifr.parse(img)
+            let exifInfo = ''
+            if (exifData) {
+                if (exifData.ExposureTime) {
+                    const exposureTime = exifData.ExposureTime < 1
+                        ? `1/${Math.round(1 / exifData.ExposureTime)}`
+                        : exifData.ExposureTime
+                    exifInfo += `${exposureTime} s\n`
+                }
+                if (exifData.FNumber) exifInfo += `f/${exifData.FNumber}\n`
+                if (exifData.ISO) exifInfo += `ISO ${exifData.ISO}\n`
+                if (exifData.FocalLength) exifInfo += `${Math.round(exifData.FocalLength)} mm\n`
+                this.exif.text = exifInfo
+            } else {
+                this.exif.text = 'No EXIF data found'
+            }
+        } catch (error) {
+            console.error('Error reading EXIF:', error)
+            this.exif.text = 'Failed to read EXIF'
+        }
+    }
+
     initLayout() {
         const img = new Image()
         img.src = this.imgSrc
@@ -380,6 +493,8 @@ class Viewport {
 
             this.histogram = new Histogram(texture)
             this.container.addChild(this.histogram.view)
+
+            this.readExif(img)
         }
     }
 }
@@ -420,7 +535,7 @@ const initLayout = async (imgSrcs) => {
 
 const initPIXIApp = async () => {
     app = new PIXI.Application()
-    await app.init({ background: "#ffffff", resizeTo: window })
+    await app.init({ background: "#FFFFFF", resizeTo: window })
     pixiContainer.value.appendChild(app.canvas)
 
     initLayout(props.imgSrcs)
