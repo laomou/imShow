@@ -218,10 +218,10 @@ class Toolbar {
             handleFlipHorizontal()
         })
         const cbxTextures = await PIXI.Assets.load(['switch-off', 'switch-on'])
-        this.addCheckBox('E', cbxTextures['switch-off'], cbxTextures['switch-on'], (checked) => {
+        this.addCheckBox('Exif', cbxTextures['switch-off'], cbxTextures['switch-on'], (checked) => {
             toggleExif()
         })
-        this.addCheckBox('H', cbxTextures['switch-off'], cbxTextures['switch-on'], (checked) => {
+        this.addCheckBox('Hist', cbxTextures['switch-off'], cbxTextures['switch-on'], (checked) => {
             toggleHistogram()
         })
         this.addCheckBox('+', cbxTextures['switch-off'], cbxTextures['switch-on'], (checked) => {
@@ -250,7 +250,7 @@ class Toolbar {
             text: label,
             style: {
                 unchecked: uncheckedTexture,
-                checked: checkedTexture,
+                checked: checkedTexture
             }
         })
         checkbox.x = 0
@@ -261,17 +261,28 @@ class Toolbar {
         onChange && checkbox.onChange.connect(onChange)
     }
 
-    updatePositions(buttonWidth = 25, spacing = 8) {
-        const totalButtonWidth = this.buttons.length * (buttonWidth + spacing) - spacing
+    updatePositions(spacing = 8) {
+        const totalButtonWidth = this.buttons.reduce((sum, button) => sum + button.width + spacing, 0) - spacing
         const buttonStartX = this.centerX - totalButtonWidth / 2
         this.buttons.forEach((button, index) => {
             button.view.x = buttonStartX + index * (button.width + spacing)
             button.view.y = 0
         })
-        this.checkboxs.forEach((checkbox, index) => {
-            checkbox.x = this.viewWidth - (index + 1) * (checkbox.width + spacing)
+        const totalCheckboxWidth = this.checkboxs.reduce((sum, checkbox) => {
+            const iconWidth = checkbox.width
+            const textWidth = checkbox.label ? checkbox.label.width : 0
+            return sum + iconWidth + textWidth + spacing
+        }, 0) - spacing
+        const checkboxStartX = this.viewWidth - totalCheckboxWidth
+        let currentX = checkboxStartX
+        this.checkboxs.forEach((checkbox) => {
+            checkbox.x = currentX
             checkbox.y = 0
+            const iconWidth = checkbox.width
+            const textWidth = checkbox.label ? checkbox.label.width : 0
+            currentX += iconWidth + textWidth + spacing
         })
+
         this.container.visible = true
     }
 }
@@ -380,7 +391,7 @@ class Viewport {
         this.border.visible = false
         this.container.addChild(this.border)
 
-        this.exif = new PIXI.Text('', {fill: 0x00ff00, fontSize: 16 })
+        this.exif = new PIXI.Text('', { fill: 0x00ff00, fontSize: 16 })
         this.exif.x = 5
         this.exif.y = 130
         this.exif.visible = false
