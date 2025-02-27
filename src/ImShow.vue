@@ -150,16 +150,25 @@ const handleWheel = (event, scaleFactor = 1.1) => {
     }
 
     if (wheelBlockIndex != -1) {
-        const newScaleX = blockViews[wheelBlockIndex].sprite.scale.x * scaleChange
-        const newScaleY = blockViews[wheelBlockIndex].sprite.scale.y * scaleChange
-        if (newScaleX >= blockViews[wheelBlockIndex].initScale || newScaleY >= blockViews[wheelBlockIndex].initScale) {
-            blockViews[wheelBlockIndex].sprite.scale.set(newScaleX, newScaleY)
+        const blockView = blockViews[wheelBlockIndex]
+        const newScaleX = blockView.sprite.scale.x * scaleChange
+        const newScaleY = blockView.sprite.scale.y * scaleChange
+        if (newScaleX >= blockView.initScale || newScaleY >= blockView.initScale) {
+            const centerX = blockView.viewRect.width / 2
+            const centerY = blockView.viewRect.height / 2
+            blockView.sprite.x = centerX + (blockView.sprite.x - centerX) * scaleChange
+            blockView.sprite.y = centerY + (blockView.sprite.y - centerY) * scaleChange
+            blockView.sprite.scale.set(newScaleX, newScaleY)
         }
     } else {
         blockViews.forEach((blockView) => {
             const newScaleX = blockView.sprite.scale.x * scaleChange
             const newScaleY = blockView.sprite.scale.y * scaleChange
             if (newScaleX >= blockView.initScale || newScaleY >= blockView.initScale) {
+                const centerX = blockView.viewRect.width / 2
+                const centerY = blockView.viewRect.height / 2
+                blockView.sprite.x = centerX + (blockView.sprite.x - centerX) * scaleChange
+                blockView.sprite.y = centerY + (blockView.sprite.y - centerY) * scaleChange
                 blockView.sprite.scale.set(newScaleX, newScaleY)
             }
         })
