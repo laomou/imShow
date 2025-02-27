@@ -1,0 +1,5 @@
+ <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path id="svg_1" stroke-linejoin="round" stroke-linecap="round" stroke-width="2" stroke="currentColor" d="m3,12l18,0m0,0l-4,-4m4,4l-4,4"/>
+    <path id="svg_2" stroke-linejoin="round" stroke-linecap="round" stroke-width="2" stroke="currentColor" d="m12,3l0,2m0,14l0,2"/>
+    <path transform="rotate(-180 12 12)" stroke="currentColor" id="svg_3" stroke-linejoin="round" stroke-linecap="round" stroke-width="2" d="m3,12l18,0m0,0l-4,-4m4,4l-4,4"/>
+</svg>
