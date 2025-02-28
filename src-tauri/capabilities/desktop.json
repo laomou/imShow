@@ -11,12 +11,16 @@
   "permissions": [
     "cli:default",
     "fs:default",
+    "log:default",
     "core:path:default",
     {
       "identifier": "fs:scope",
       "allow": [
         {
           "path": "$APPCACHE/*"
+        },
+        {
+          "path": "$APPLOG/*"
         }
       ]
     }

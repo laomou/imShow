@@ -1,70 +1,67 @@
+mod commands;
+mod state;
+
+use state::AppState;
 use std::path::Path;
-use std::sync::Mutex;
-use tauri::command;
 use tauri::Manager;
-use tauri::State;
 use tauri_plugin_cli::CliExt;
+use tauri_plugin_log::Target;
+use tauri_plugin_log::TargetKind;
 
-struct AppState {
-    image_paths: Mutex<Vec<String>>,
+const SUPPORTED_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "bmp"];
+
+fn is_supported_image(path: &Path) -> bool {
+    path.is_file()
+        && path.exists()
+        && path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| SUPPORTED_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
+            .unwrap_or(false)
 }
 
-fn add_image(state: State<AppState>, file_name: String) {
-    state.image_paths.lock().unwrap().push(file_name);
-}
+fn handle_cli_args(app: &tauri::App) {
+    let matches = app.cli().matches().unwrap();
 
-#[command]
-fn get_image_paths(state: State<AppState>) -> Vec<String> {
-    state.image_paths.lock().unwrap().clone()
-}
-
-#[command]
-fn quit_app(window: tauri::Window) {
-    window.close().unwrap();
+    if let Some(arg) = matches.args.get("img") {
+        if let Some(paths) = arg.value.as_array() {
+            for path in paths.iter().filter_map(|p| p.as_str()) {
+                let src_file = Path::new(path);
+                if is_supported_image(src_file) {
+                    commands::add_image(
+                        app.try_state().unwrap(),
+                        src_file.to_string_lossy().to_string(),
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let state = AppState {
-        image_paths: Mutex::new(Vec::new()),
-    };
     tauri::Builder::default()
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_cli::init())
         .setup(|app| {
-            match app.cli().matches() {
-                Ok(matches) => {
-                    if let Some(arg) = matches.args.get("img") {
-                        if let Some(arr) = arg.value.as_array() {
-                            for item in arr {
-                                if let Some(path) = item.as_str() {
-                                    let src_file = Path::new(path);
-                                    if src_file.is_file() && src_file.exists() {
-                                        let extension =
-                                            src_file.extension().unwrap().to_str().unwrap();
-                                        if extension == "png"
-                                            || extension == "jpg"
-                                            || extension == "jpeg"
-                                            || extension == "bmp"
-                                        {
-                                            add_image(
-                                                app.try_state().unwrap(),
-                                                src_file.to_string_lossy().to_string(),
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(_) => {}
-            }
-
+            handle_cli_args(app);
             Ok(())
         })
-        .manage(state)
-        .invoke_handler(tauri::generate_handler![quit_app, get_image_paths,])
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                    Target::new(TargetKind::Webview),
+                ])
+                .level(log::LevelFilter::Debug)
+                .build(),
+        )
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_cli::init())
+        .manage(AppState::new())
+        .invoke_handler(tauri::generate_handler![
+            commands::get_image_paths,
+            commands::quit_app,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

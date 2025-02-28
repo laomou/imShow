@@ -2,7 +2,6 @@
 import { ref, onMounted, onUnmounted } from "vue"
 import { convertFileSrc, invoke } from "@tauri-apps/api/core"
 import ImShow from "./ImShow.vue"
-import { readFile, BaseDirectory } from '@tauri-apps/plugin-fs'
 
 const imgSrcs = ref([])
 
@@ -12,16 +11,16 @@ const handleKeydown = (event) => {
   }
 }
 
-const loadImgBlobs = async () => {
+const loadImgPaths = async () => {
   const imgPaths = await invoke('get_image_paths');
   imgSrcs.value = await Promise.all(imgPaths.map(async (path) => {
     return convertFileSrc(path)
   }))
 }
 
-onMounted(() => {
-  loadImgBlobs()
+onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
+  await loadImgPaths()
 })
 
 onUnmounted(() => {
@@ -36,4 +35,10 @@ onUnmounted(() => {
   </main>
 </template>
 
-<style scoped></style>
+<style scoped>
+.container {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+</style>

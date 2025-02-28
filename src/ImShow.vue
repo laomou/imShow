@@ -1,8 +1,17 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, onMounted, onUpdated, onUnmounted, watch } from "vue"
 import * as PIXI from "pixi.js"
 import { Button, CheckBox } from '@pixi/ui'
 import exifr from 'exifr'
+import { warn, debug, trace, info, error } from '@tauri-apps/plugin-log'
+import rotateLeftIcon from '@/assets/rotate-left.svg'
+import resetIcon from '@/assets/reset.svg'
+import leftCmpIcon from '@/assets/left-cmp.svg'
+import rotateRightIcon from '@/assets/rotate-right.svg'
+import flipHorizontalIcon from '@/assets/flip-horizontal.svg'
+import switchOffIcon from '@/assets/switch-off.svg'
+import switchOnIcon from '@/assets/switch-on.svg'
+
 
 const props = defineProps({
     imgSrcs: {
@@ -12,7 +21,7 @@ const props = defineProps({
 })
 
 const pixiContainer = ref(null)
-let app = null
+let pixi_app = null
 let blockRects = []
 let blockViews = []
 let selectedBlockIndex = -1
@@ -173,28 +182,28 @@ const handleWheel = (event, scaleFactor = 1.1) => {
 }
 
 class Toolbar {
-    constructor(app) {
+    constructor(pixi_app) {
         this.container = new PIXI.Container()
         this.container.x = 0
         this.container.y = 0
         this.container.zIndex = 90
         this.container.visible = false
-        app.stage.addChild(this.container)
+        pixi_app.stage.addChild(this.container)
 
-        this.viewWidth = app.canvas.width
+        this.viewWidth = pixi_app.screen.width
         this.centerX = this.viewWidth / 2
         this.buttons = []
         this.checkboxs = []
     }
 
     async initLayout(hasCmp = false) {
-        PIXI.Assets.add({ alias: 'rotate-left', src: 'src/assets/rotate-left.svg' })
-        PIXI.Assets.add({ alias: 'reset', src: 'src/assets/reset.svg' })
-        PIXI.Assets.add({ alias: 'left-cmp', src: 'src/assets/left-cmp.svg' })
-        PIXI.Assets.add({ alias: 'rotate-right', src: 'src/assets/rotate-right.svg' })
-        PIXI.Assets.add({ alias: 'flip-h', src: 'src/assets/flip-horizontal.svg' })
-        PIXI.Assets.add({ alias: 'switch-off', src: 'src/assets/switch-off.svg' })
-        PIXI.Assets.add({ alias: 'switch-on', src: 'src/assets/switch-on.svg' })
+        PIXI.Assets.add({ alias: 'rotate-left', src: rotateLeftIcon })
+        PIXI.Assets.add({ alias: 'reset', src: resetIcon })
+        PIXI.Assets.add({ alias: 'left-cmp', src: leftCmpIcon })
+        PIXI.Assets.add({ alias: 'rotate-right', src: rotateRightIcon })
+        PIXI.Assets.add({ alias: 'flip-h', src: flipHorizontalIcon })
+        PIXI.Assets.add({ alias: 'switch-off', src: switchOffIcon })
+        PIXI.Assets.add({ alias: 'switch-on', src: switchOnIcon })
 
         const btnTextures = await PIXI.Assets.load(['rotate-left', 'left-cmp', 'reset', 'rotate-right', 'flip-h'])
         this.addButton(btnTextures['rotate-left'], () => {
@@ -366,7 +375,7 @@ class Histogram {
 }
 
 class Viewport {
-    constructor(app, imgSrc, viewRect) {
+    constructor(pixi_app, imgSrc, viewRect) {
         this.imgSrc = imgSrc
         this.viewRect = viewRect
         this.initScale = 1
@@ -374,7 +383,7 @@ class Viewport {
         this.container = new PIXI.Container()
         this.container.x = viewRect.x
         this.container.y = viewRect.y
-        app.stage.addChild(this.container)
+        pixi_app.stage.addChild(this.container)
 
         const mask = new PIXI.Graphics()
         mask.beginFill(0xffffff)
@@ -491,15 +500,15 @@ class Viewport {
                 this.exif.text = 'No EXIF data found'
             }
         } catch (error) {
-            console.error('Error reading EXIF:', error)
+            error(`Error reading EXIF: ${ error }`)
             this.exif.text = 'Failed to read EXIF'
         }
     }
 
     initLayout() {
         const img = new Image()
-        img.src = this.imgSrc
         img.crossOrigin = "anonymous"
+        img.src = this.imgSrc
         img.onload = () => {
             const texture = PIXI.Texture.from(img)
             this.sprite = new PIXI.Sprite(texture)
@@ -515,6 +524,9 @@ class Viewport {
             this.container.addChild(this.histogram.view)
 
             this.readExif(img)
+        }
+        img.onerror = () => {
+            error(`Failed to load image: ${ this.imgSrc }`)
         }
     }
 }
@@ -542,50 +554,69 @@ function calculateBlockRects(canvasWidth, canvasHeight, numBlocks, paddingX = 4,
     return blocks
 }
 
+const cleanLayout = () => {
+    blockViews.forEach(view => {
+        pixi_app.stage.removeChild(view.container)
+    })
+    blockViews = []
+    blockRects = []
+}
+
 const initLayout = async (imgSrcs) => {
-    const toolbar = new Toolbar(app)
+    const toolbar = new Toolbar(pixi_app)
     await toolbar.initLayout(imgSrcs.length > 1)
-    blockRects = calculateBlockRects(app.canvas.width, app.canvas.height, imgSrcs.length)
-    imgSrcs.forEach((imgSrc, index) => {
-        const viewport = new Viewport(app, imgSrc, blockRects[index])
+    blockRects = calculateBlockRects(pixi_app.canvas.width, pixi_app.canvas.height, imgSrcs.length)
+    await Promise.all(imgSrcs.map(async (imgSrc, index) => {
+        const viewport = new Viewport(pixi_app, imgSrc, blockRects[index])
         blockViews.push(viewport)
         viewport.initLayout()
-    })
+        return viewport
+    }))
 }
 
 const initPIXIApp = async () => {
-    app = new PIXI.Application()
-    await app.init({ background: "#FFFFFF", resizeTo: window })
-    pixiContainer.value.appendChild(app.canvas)
+    pixi_app = new PIXI.Application()
+    await pixi_app.init({ background: "#FFFFFF", resizeTo: window })
+    pixiContainer.value.appendChild(pixi_app.canvas)
 
-    await initLayout(props.imgSrcs)
+    pixi_app.canvas.oncontextmenu = (event) => false
+    pixi_app.canvas.addEventListener('wheel', handleWheel, { passive: false })
+    pixi_app.canvas.addEventListener('dblclick', handleDoubleClick)
+    pixi_app.canvas.addEventListener('mousedown', handleMouseDown)
+    pixi_app.canvas.addEventListener('mousemove', handleMouseMove)
+    pixi_app.canvas.addEventListener('mouseup', handleMouseUp)
 
-    app.canvas.oncontextmenu = (event) => {
-        return false
+    if (props.imgSrcs?.length > 0) {
+        await initLayout(props.imgSrcs)
     }
-
-    app.canvas.addEventListener('wheel', handleWheel, { passive: false })
-    app.canvas.addEventListener('dblclick', handleDoubleClick)
-    app.canvas.addEventListener('mousedown', handleMouseDown)
-    app.canvas.addEventListener('mousemove', handleMouseMove)
-    app.canvas.addEventListener('mouseup', handleMouseUp)
 }
 
-onMounted(() => {
-    initPIXIApp()
+watch(props.imgSrcs, async (newImgSrcs, oldImgSrcs) => {
+    if (pixi_app) {
+        cleanLayout()
+        if (newImgSrcs?.length > 0) {
+            await initLayout(newImgSrcs)
+        }
+    }
+}, { immediate: false })
+
+onMounted(async () => {
+    await initPIXIApp()
 })
 
 onUnmounted(() => {
-    if (app) {
-        app.canvas.removeEventListener('wheel', handleWheel, { passive: false })
-        app.canvas.removeEventListener('dblclick', handleDoubleClick)
-        app.canvas.removeEventListener('mousedown', handleMouseDown)
-        app.canvas.removeEventListener('mousemove', handleMouseMove)
-        app.canvas.removeEventListener('mouseup', handleMouseUp)
-        app.destroy()
+    if (pixi_app) {
+        pixi_app.canvas.removeEventListener('wheel', handleWheel, { passive: false })
+        pixi_app.canvas.removeEventListener('dblclick', handleDoubleClick)
+        pixi_app.canvas.removeEventListener('mousedown', handleMouseDown)
+        pixi_app.canvas.removeEventListener('mousemove', handleMouseMove)
+        pixi_app.canvas.removeEventListener('mouseup', handleMouseUp)
+        pixi_app.destroy()
+        pixi_app = null
     }
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
+        animationFrameId = null
     }
 })
 
