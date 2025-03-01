@@ -169,6 +169,8 @@ const handleWheel = (event, scaleFactor = 1.1) => {
 
   if (wheelBlockIndex != -1) {
     scaleBlockView(blockViews[wheelBlockIndex])
+  } else if (selectedBlockIndex != -1) {
+    scaleBlockView(blockViews[selectedBlockIndex])
   } else {
     blockViews.forEach(scaleBlockView)
   }
@@ -422,22 +424,21 @@ class ExifText {
 }
 
 class Viewport {
-  constructor(pixi_app, imgSrc, viewRect) {
+  constructor(imgSrc, viewRect) {
     this.imgSrc = imgSrc
     this.viewRect = viewRect
     this.initScale = 1
 
-    this.container = new PIXI.Container()
-    this.container.x = viewRect.x
-    this.container.y = viewRect.y
-    pixi_app.stage.addChild(this.container)
+    this.view = new PIXI.Container()
+    this.view.x = viewRect.x
+    this.view.y = viewRect.y
 
     const mask = new PIXI.Graphics()
     mask.beginFill(0xffffff)
     mask.drawRect(0, 0, viewRect.width, viewRect.height)
     mask.endFill()
-    this.container.addChild(mask)
-    this.container.mask = mask
+    this.view.addChild(mask)
+    this.view.mask = mask
 
     this.border = new PIXI.Graphics()
     this.border.beginFill(0xffffff)
@@ -445,7 +446,7 @@ class Viewport {
     this.border.drawRect(0, 0, viewRect.width, viewRect.height)
     this.border.endFill()
     this.border.visible = false
-    this.container.addChild(this.border)
+    this.view.addChild(this.border)
 
     this.centerMark = new PIXI.Graphics()
     this.centerMark.beginFill(0xffffff)
@@ -457,7 +458,7 @@ class Viewport {
     this.centerMark.endFill()
     this.centerMark.visible = false
     this.centerMark.zIndex = 100
-    this.container.addChild(this.centerMark)
+    this.view.addChild(this.centerMark)
   }
 
   flip_h() {
@@ -508,12 +509,12 @@ class Viewport {
     this.tmpSprite.width = sprite.width
     this.tmpSprite.height = sprite.height
     this.tmpSprite.anchor.set(0.5)
-    this.container.addChild(this.tmpSprite)
+    this.view.addChild(this.tmpSprite)
     this.histogram.update(sprite.texture)
   }
 
   restore() {
-    this.container.removeChild(this.tmpSprite)
+    this.view.removeChild(this.tmpSprite)
     this.sprite.visible = true
     this.histogram.update(this.sprite.texture)
   }
@@ -524,7 +525,7 @@ class Viewport {
       img.crossOrigin = "anonymous"
       img.src = this.imgSrc
 
-      img.onload = () => {
+      img.onload = async () => {
         const texture = PIXI.Texture.from(img)
         this.sprite = new PIXI.Sprite(texture)
         this.sprite.x = this.viewRect.width / 2
@@ -533,17 +534,23 @@ class Viewport {
         this.sprite.scale.set(this.initScale, this.initScale)
         this.sprite.anchor.set(0.5, 0.5)
         this.sprite.angle = 0
-        this.container.addChild(this.sprite)
+        this.view.addChild(this.sprite)
 
-        this.histogram = new Histogram(texture)
-        this.container.addChild(this.histogram.view)
-
-        this.exif = new ExifText(img)
-        this.container.addChild(this.exif.view)
+        await Promise.all([
+          new Promise(resolve => {
+            this.histogram = new Histogram(texture)
+            this.view.addChild(this.histogram.view)
+            resolve()
+          }),
+          new Promise(resolve => {
+            this.exif = new ExifText(img)
+            this.view.addChild(this.exif.view)
+            resolve()
+          }),
+        ])
 
         resolve()
       }
-
       img.onerror = reject
     })
   }
@@ -576,8 +583,14 @@ const initLayout = async (imgSrcs) => {
   const toolbar = new Toolbar(pixi_app)
   await toolbar.initLayout(imgSrcs.length > 1)
   blockRects = calculateBlockRects(pixi_app.canvas.width, pixi_app.canvas.height, imgSrcs.length)
-  blockViews = blockRects.map((rect, index) => new Viewport(pixi_app, imgSrcs[index], rect))
-  await Promise.all(blockViews.map(viewport => viewport.initLayout()))
+  blockViews = blockRects.map((rect, index) => {
+    const viewport = new Viewport(imgSrcs[index], rect)
+    pixi_app.stage.addChild(viewport.view)
+    return viewport
+  })
+  await Promise.all(blockViews.map((viewport) => {
+    viewport.initLayout()
+  }))
 }
 
 const initPIXIApp = async () => {
