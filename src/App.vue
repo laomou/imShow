@@ -182,6 +182,16 @@ const handleKeydown = (event) => {
   }
 }
 
+const Colors = {
+  BACKGROUND: 0xffffff,
+  EXIF_TEXT: 0x00ff00,
+  HIST_R: 0xff0000,
+  HIST_G: 0x00ff00,
+  HIST_B: 0x0000ff,
+  HIST_GRAY: 0xcccccc,
+  HIST_LABELS: 0xcccccc
+}
+
 class Toolbar {
   constructor(pixi_app) {
     this.container = new PIXI.Container()
@@ -310,11 +320,24 @@ class Histogram {
     this.view.zIndex = 100
     this.hitArea = new PIXI.Rectangle(0, 0, this.viewWidth, this.viewHeight)
     this.view.hitArea = this.hitArea
+    this.view.visible = false
     this.view.interactive = true
     this.view.on('pointerdown', this.toggleMode, this)
 
     this.histogramGraphics = new PIXI.Graphics()
     this.view.addChild(this.histogramGraphics)
+
+    const labelPoints = [0, 64, 128, 192, 255]
+    labelPoints.forEach(value => {
+      const text = new PIXI.Text(value.toString(), {
+        fontSize: 10,
+        fill: Colors.HIST_LABELS,
+        align: 'center'
+      })
+      text.x = value - text.width / 2 + 4
+      text.y = 105
+      this.view.addChild(text)
+    })
 
     this.update(this.texture)
   }
@@ -366,11 +389,11 @@ class Histogram {
     }
 
     if (this.mode === 'rgb') {
-      drawChannel('r', 0xff0000, 0)
-      drawChannel('g', 0x00ff00, 0)
-      drawChannel('b', 0x0000ff, 0)
+      drawChannel('r', Colors.HIST_R, 4)
+      drawChannel('g', Colors.HIST_G, 4)
+      drawChannel('b', Colors.HIST_B, 4)
     } else {
-      drawChannel('gray', 0x888888, 0)
+      drawChannel('gray', Colors.HIST_GRAY, 4)
     }
   }
 }
@@ -384,7 +407,7 @@ class ExifText {
     this.view.visible = false
     this.view.zIndex = 100
 
-    this.exif = new PIXI.Text('', { fill: 0x00ff00, fontSize: 16 })
+    this.exif = new PIXI.Text('', { fill: Colors.EXIF_TEXT, fontSize: 16 })
     this.exif.x = 5
     this.exif.y = 130
     this.view.addChild(this.exif)
@@ -436,14 +459,14 @@ class Viewport {
     this.view.y = viewRect.y
 
     const mask = new PIXI.Graphics()
-    mask.beginFill(0xffffff)
+    mask.beginFill(Colors.BACKGROUND)
     mask.drawRect(0, 0, viewRect.width, viewRect.height)
     mask.endFill()
     this.view.addChild(mask)
     this.view.mask = mask
 
     this.border = new PIXI.Graphics()
-    this.border.beginFill(0xffffff)
+    this.border.beginFill(Colors.BACKGROUND)
     this.border.lineStyle(2, 0x00ff00, 1)
     this.border.drawRect(0, 0, viewRect.width, viewRect.height)
     this.border.endFill()
@@ -451,7 +474,7 @@ class Viewport {
     this.view.addChild(this.border)
 
     this.centerMark = new PIXI.Graphics()
-    this.centerMark.beginFill(0xffffff)
+    this.centerMark.beginFill(Colors.BACKGROUND)
     this.centerMark.lineStyle(1, 0xff0000, 1)
     this.centerMark.moveTo(this.viewRect.width / 2, this.viewRect.height / 2 - 10)
     this.centerMark.lineTo(this.viewRect.width / 2, this.viewRect.height / 2 + 10)
@@ -597,7 +620,7 @@ const initLayout = async (imgSrcs) => {
 
 const initPIXIApp = async () => {
   pixi_app = new PIXI.Application()
-  await pixi_app.init({ background: "#FFFFFF", resizeTo: window })
+  await pixi_app.init({ background: Colors.BACKGROUND, resizeTo: window })
   pixiContainer.value.appendChild(pixi_app.canvas)
 
   pixi_app.canvas.oncontextmenu = (event) => false
@@ -645,7 +668,7 @@ onUnmounted(() => {
 
 <style scoped>
 .pixi-container {
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
 }
 </style>
