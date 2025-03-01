@@ -13,6 +13,47 @@ import flipHorizontalIcon from '@/assets/flip-horizontal.svg'
 import switchOffIcon from '@/assets/switch-off.svg'
 import switchOnIcon from '@/assets/switch-on.svg'
 
+const fragmentShader = `
+#ifdef GL_ES
+precision mediump float;
+#endif
+in vec2 vTextureCoord;
+in vec4 vColor;
+
+uniform sampler2D uTexture;
+
+vec3 sRGBToLinear(vec3 sRGB) {
+    return mix(
+        sRGB / 12.92,
+        pow((sRGB + 0.055) / 1.055, vec3(2.4)),
+        step(0.04045, sRGB)
+    );
+}
+
+vec3 linearToSRGB(vec3 linear) {
+    return mix(
+        linear * 12.92,
+        1.055 * pow(linear, vec3(1.0 / 2.4)) - 0.055,
+        step(0.0031308, linear)
+    );
+}
+
+const mat3 sRGBToP3 = mat3(
+    1.2249, -0.2247, 0.0,
+    -0.0420, 1.0419, 0.0,
+    -0.0197, -0.0786, 1.0979
+);
+
+void main(void)
+{
+    vec4 textureColor = texture2D(uTexture, vTextureCoord);
+    vec3 linearSRGB = sRGBToLinear(textureColor.rgb);
+    vec3 linearP3 = sRGBToP3 * linearSRGB;
+    vec3 p3Color = linearToSRGB(linearP3);
+    gl_FragColor = vec4(p3Color, textureColor.a);
+}
+`
+
 const pixiContainer = ref(null)
 let pixi_app = null
 let blockRects = []
@@ -437,7 +478,8 @@ class ExifText {
   async readExif(img) {
     let exifInfo = ''
     const fileName = decodeURIComponent(img.src).split(/[\/\\]/).pop()
-    exifInfo += `${fileName}\n\n`
+    exifInfo += `${fileName}, ${img.width}x${img.height}\n`
+    exifInfo += '------------\n'
     const exifData = await exifr.parse(img, { icc: true })
     if (exifData) {
       if (exifData.ExposureTime) {
@@ -501,6 +543,13 @@ class Viewport {
     this.centerMark.visible = false
     this.centerMark.zIndex = 100
     this.view.addChild(this.centerMark)
+
+    this.srgbToP3Filter = PIXI.Filter.from({
+      gl: {
+        fragment: fragmentShader,
+        vertex: PIXI.defaultFilterVert
+      }
+    })
   }
 
   flip_h() {
@@ -579,6 +628,9 @@ class Viewport {
       img.onload = async () => {
         const texture = PIXI.Texture.from(img)
         this.sprite = new PIXI.Sprite(texture)
+        if (await this.shouldApplySrgbToP3Filter(img)) {
+          this.sprite.filters = [this.srgbToP3Filter]
+        }
         this.sprite.x = this.viewRect.width / 2
         this.sprite.y = this.viewRect.height / 2
         this.initScale = Math.min(this.viewRect.width / texture.width, this.viewRect.height / texture.height)
@@ -604,6 +656,32 @@ class Viewport {
       }
       img.onerror = reject
     })
+  }
+
+  async shouldApplySrgbToP3Filter(img) {
+    try {
+      const deviceSupportsP3 = window.matchMedia("(color-gamut: p3)").matches
+      debug(`Device P3 support: ${deviceSupportsP3}`)
+      if (!deviceSupportsP3) {
+        return false
+      }
+
+      const iccInfo = await exifr.parse(img, {
+        tiff: false,
+        xmp: false,
+        icc: true,
+        jfif: false,
+        iptc: false
+      })
+      const hasP3Profile = iccInfo?.ColorSpace === 'Display P3' ||
+        iccInfo?.ProfileDescription?.includes('Display P3')
+      debug(`ICC Profile support: ${hasP3Profile}`)
+
+      return deviceSupportsP3 && hasP3Profile
+    } catch (err) {
+      error('Error checking P3 filter:', err)
+      return false
+    }
   }
 }
 
