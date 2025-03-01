@@ -389,7 +389,7 @@ class ExifText {
     this.exif.y = 130
     this.view.addChild(this.exif)
 
-    this.readExif(image)
+    this.readExif(this.image)
   }
 
   toggleExif() {
@@ -398,6 +398,8 @@ class ExifText {
 
   async readExif(img) {
     let exifInfo = ''
+    const fileName = decodeURIComponent(img.src).split(/[\/\\]/).pop()
+    exifInfo += `${fileName}\n\n`
     const exifData = await exifr.parse(img)
     if (exifData) {
       if (exifData.ExposureTime) {
