@@ -504,12 +504,19 @@ class Viewport {
   }
 
   flip_h() {
-    this.sprite.scale.x = -this.sprite.scale.x
-    this.sprite.x = this.viewRect.width - this.sprite.x
+    const angle = ((this.sprite.angle % 360) + 360) % 360
+    const isVertical = angle === 90 || angle === 270 || angle === -90
+    if (isVertical) {
+      this.sprite.scale.y *= -1
+      this.sprite.y = this.viewRect.height - this.sprite.y
+    } else {
+      this.sprite.scale.x *= -1
+      this.sprite.x = this.viewRect.width - this.sprite.x
+    }
   }
 
   rotate(angle) {
-    this.sprite.angle = (this.sprite.angle + angle + 360) % 360;
+    this.sprite.angle = (this.sprite.angle + angle + 360) % 360
   }
 
   move(offsetX, offsetY) {
