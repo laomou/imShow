@@ -13,7 +13,6 @@ import flipHorizontalIcon from '@/assets/flip-horizontal.svg'
 import switchOffIcon from '@/assets/switch-off.svg'
 import switchOnIcon from '@/assets/switch-on.svg'
 
-
 const pixiContainer = ref(null)
 let pixi_app = null
 let blockRects = []
@@ -22,6 +21,7 @@ let selectedBlockIndex = -1
 let isDragging = false
 let dragStart = { x: 0, y: 0 }
 let animationFrameId = null
+let histogramCache = new Map()
 
 const isMouseInBlock = (x, y, blockRect) => {
   return x >= blockRect.x && x <= blockRect.x + blockRect.width && y >= blockRect.y && y <= blockRect.y + blockRect.height
@@ -68,12 +68,20 @@ const handleRotateLeft = () => {
 const handleCmpDown = () => {
   if (selectedBlockIndex != -1) {
     blockViews[0].update(blockViews[selectedBlockIndex].sprite)
+  } else {
+    if (blockViews.length == 2) {
+      blockViews[0].update(blockViews[1].sprite)
+    }
   }
 }
 
 const handleCmpUp = () => {
   if (selectedBlockIndex != -1) {
     blockViews[0].restore()
+  } else {
+    if (blockViews.length == 2) {
+      blockViews[0].restore()
+    }
   }
 }
 
@@ -169,8 +177,6 @@ const handleWheel = (event, scaleFactor = 1.1) => {
 
   if (wheelBlockIndex != -1) {
     scaleBlockView(blockViews[wheelBlockIndex])
-  } else if (selectedBlockIndex != -1) {
-    scaleBlockView(blockViews[selectedBlockIndex])
   } else {
     blockViews.forEach(scaleBlockView)
   }
@@ -338,7 +344,6 @@ class Histogram {
       text.y = 105
       this.view.addChild(text)
     })
-
     this.update(this.texture)
   }
 
@@ -348,10 +353,20 @@ class Histogram {
   }
 
   update(texture) {
+    const textureId = texture.baseTexture.uid
+    if (histogramCache.has(textureId)) {
+      this.drawHistogram(histogramCache.get(textureId))
+      return
+    }
     const canvas = texture.source.resource
     const context = canvas.getContext('2d', { willReadFrequently: true })
     const imgData = context.getImageData(0, 0, canvas.width, canvas.height)
+    const histogram = this.calculateHistogram(imgData)
+    histogramCache.set(textureId, histogram)
+    this.drawHistogram(histogram)
+  }
 
+  calculateHistogram(imgData) {
     const histogram = {
       r: new Array(256).fill(0),
       g: new Array(256).fill(0),
@@ -371,7 +386,7 @@ class Histogram {
       histogram.gray[gray]++
     }
 
-    this.drawHistogram(histogram)
+    return histogram
   }
 
   drawHistogram(histogram) {
@@ -423,7 +438,7 @@ class ExifText {
     let exifInfo = ''
     const fileName = decodeURIComponent(img.src).split(/[\/\\]/).pop()
     exifInfo += `${fileName}\n\n`
-    const exifData = await exifr.parse(img)
+    const exifData = await exifr.parse(img, { icc: true })
     if (exifData) {
       if (exifData.ExposureTime) {
         const exposureTime = exifData.ExposureTime < 1
@@ -437,8 +452,10 @@ class ExifText {
       exifInfo += '\n'
       if (exifData.Model) exifInfo += `${exifData.Model}\n`
       if (exifData.Make) exifInfo += `${exifData.Make}\n`
+      exifInfo += '\n'
+      if (exifData.ColorSpaceData) exifInfo += `${exifData.ColorSpaceData}\n`
     } else {
-      exifData = 'No EXIF data found'
+      exifInfo += 'No EXIF data found'
     }
     this.drawExifText(exifInfo)
   }
@@ -527,6 +544,9 @@ class Viewport {
   update(sprite) {
     this.sprite.visible = false
     this.tmpSprite = new PIXI.Sprite(sprite.texture)
+    if (sprite.filters) {
+      this.tmpSprite.filters = sprite.filters
+    }
     this.tmpSprite.scale.set(sprite.scale.x, sprite.scale.y)
     this.tmpSprite.angle = sprite.angle
     this.tmpSprite.x = sprite.x
@@ -549,7 +569,6 @@ class Viewport {
       const img = new Image()
       img.crossOrigin = "anonymous"
       img.src = this.imgSrc
-
       img.onload = async () => {
         const texture = PIXI.Texture.from(img)
         this.sprite = new PIXI.Sprite(texture)
