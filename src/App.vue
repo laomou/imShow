@@ -13,47 +13,6 @@ import flipHorizontalIcon from '@/assets/flip-horizontal.svg'
 import switchOffIcon from '@/assets/switch-off.svg'
 import switchOnIcon from '@/assets/switch-on.svg'
 
-const fragmentShader = `
-#ifdef GL_ES
-precision mediump float;
-#endif
-in vec2 vTextureCoord;
-in vec4 vColor;
-
-uniform sampler2D uTexture;
-
-vec3 sRGBToLinear(vec3 sRGB) {
-    return mix(
-        sRGB / 12.92,
-        pow((sRGB + 0.055) / 1.055, vec3(2.4)),
-        step(0.04045, sRGB)
-    );
-}
-
-vec3 linearToSRGB(vec3 linear) {
-    return mix(
-        linear * 12.92,
-        1.055 * pow(linear, vec3(1.0 / 2.4)) - 0.055,
-        step(0.0031308, linear)
-    );
-}
-
-const mat3 sRGBToP3 = mat3(
-    1.2249, -0.2247, 0.0,
-    -0.0420, 1.0419, 0.0,
-    -0.0197, -0.0786, 1.0979
-);
-
-void main(void)
-{
-    vec4 textureColor = texture2D(uTexture, vTextureCoord);
-    vec3 linearSRGB = sRGBToLinear(textureColor.rgb);
-    vec3 linearP3 = sRGBToP3 * linearSRGB;
-    vec3 p3Color = linearToSRGB(linearP3);
-    gl_FragColor = vec4(p3Color, textureColor.a);
-}
-`
-
 const pixiContainer = ref(null)
 let pixi_app = null
 let blockRects = []
@@ -196,30 +155,23 @@ const handleMouseUp = () => {
 }
 
 const handleWheel = (event, scaleFactor = 1.1) => {
+  event.preventDefault()
+
   const delta = event.deltaY > 0 ? -1 : 1
   const scaleChange = delta > 0 ? scaleFactor : 1 / scaleFactor
 
-  let wheelBlockIndex = -1
   if (event.ctrlKey) {
-    wheelBlockIndex = blockRects.findIndex((blockRect) => isMouseInBlock(event.clientX, event.clientY, blockRect))
-  }
+    const index = blockRects.findIndex((blockRect) =>
+      isMouseInBlock(event.clientX, event.clientY, blockRect)
+    )
 
-  const scaleBlockView = (blockView) => {
-    const newScaleX = blockView.sprite.scale.x * scaleChange
-    const newScaleY = blockView.sprite.scale.y * scaleChange
-    if (newScaleX >= blockView.initScale || newScaleY >= blockView.initScale) {
-      const centerX = blockView.viewRect.width / 2
-      const centerY = blockView.viewRect.height / 2
-      blockView.sprite.x = centerX + (blockView.sprite.x - centerX) * scaleChange
-      blockView.sprite.y = centerY + (blockView.sprite.y - centerY) * scaleChange
-      blockView.sprite.scale.set(newScaleX, newScaleY)
+    if (index !== -1) {
+      blockViews[index].scale(scaleChange)
     }
-  }
-
-  if (wheelBlockIndex != -1) {
-    scaleBlockView(blockViews[wheelBlockIndex])
   } else {
-    blockViews.forEach(scaleBlockView)
+    blockViews.forEach(blockView => {
+      blockView.scale(scaleChange)
+    })
   }
 }
 
@@ -295,6 +247,8 @@ class Toolbar {
       toggleCenterMark()
     })
     this.updatePositions()
+
+    pixi_app.render()
   }
 
   addButton(texture, onPress, onDown = null, onUp = null) {
@@ -391,6 +345,12 @@ class Histogram {
   toggleMode() {
     this.mode = this.mode === 'rgb' ? 'gray' : 'rgb'
     this.update(this.texture)
+
+    pixi_app.render()
+  }
+
+  toggleView() {
+    this.view.visible = !this.view.visible
   }
 
   update(texture) {
@@ -471,7 +431,7 @@ class ExifText {
     this.readExif(this.image)
   }
 
-  toggleExif() {
+  toggleView() {
     this.view.visible = !this.view.visible
   }
 
@@ -480,25 +440,32 @@ class ExifText {
     const fileName = decodeURIComponent(img.src).split(/[\/\\]/).pop()
     exifInfo += `${fileName}, ${img.width}x${img.height}\n`
     exifInfo += '------------\n'
-    const exifData = await exifr.parse(img, { icc: true })
-    if (exifData) {
-      if (exifData.ExposureTime) {
-        const exposureTime = exifData.ExposureTime < 1
-          ? `1/${Math.round(1 / exifData.ExposureTime)}`
-          : exifData.ExposureTime
-        exifInfo += `${exposureTime} s\n`
+    try {
+      const exifData = await exifr.parse(img, { icc: true })
+      if (exifData) {
+        if (exifData.ExposureTime) {
+          const exposureTime = exifData.ExposureTime < 1
+            ? `1/${Math.round(1 / exifData.ExposureTime)}`
+            : exifData.ExposureTime
+          exifInfo += `${exposureTime} s\n`
+        }
+        if (exifData.FNumber) exifInfo += `f/${exifData.FNumber}\n`
+        if (exifData.ISO) exifInfo += `ISO ${exifData.ISO}\n`
+        if (exifData.FocalLength) exifInfo += `${Math.round(exifData.FocalLength)} mm\n`
+        exifInfo += '\n'
+        if (exifData.Model) exifInfo += `${exifData.Model}\n`
+        if (exifData.Make) exifInfo += `${exifData.Make}\n`
+        exifInfo += '\n'
+        if (exifData.ColorSpaceData) exifInfo += `${exifData.ColorSpaceData}\n`
+        if (exifData.ProfileDescription) exifInfo += `${exifData.ProfileDescription}\n`
+      } else {
+        exifInfo += 'No EXIF data found'
       }
-      if (exifData.FNumber) exifInfo += `f/${exifData.FNumber}\n`
-      if (exifData.ISO) exifInfo += `ISO ${exifData.ISO}\n`
-      if (exifData.FocalLength) exifInfo += `${Math.round(exifData.FocalLength)} mm\n`
-      exifInfo += '\n'
-      if (exifData.Model) exifInfo += `${exifData.Model}\n`
-      if (exifData.Make) exifInfo += `${exifData.Make}\n`
-      exifInfo += '\n'
-      if (exifData.ColorSpaceData) exifInfo += `${exifData.ColorSpaceData}\n`
-    } else {
+    } catch (err) {
+      error(`exifr.parse ${err}`)
       exifInfo += 'No EXIF data found'
     }
+
     this.drawExifText(exifInfo)
   }
 
@@ -512,6 +479,8 @@ class Viewport {
     this.imgSrc = imgSrc
     this.viewRect = viewRect
     this.initScale = 1
+    this.centerX = this.viewRect.width / 2
+    this.centerY = this.viewRect.height / 2
 
     this.view = new PIXI.Container()
     this.view.x = viewRect.x
@@ -543,34 +512,45 @@ class Viewport {
     this.centerMark.visible = false
     this.centerMark.zIndex = 100
     this.view.addChild(this.centerMark)
-
-    this.srgbToP3Filter = PIXI.Filter.from({
-      gl: {
-        fragment: fragmentShader,
-        vertex: PIXI.defaultFilterVert
-      }
-    })
   }
 
   flip_h() {
     const angle = ((this.sprite.angle % 360) + 360) % 360
     const isVertical = angle === 90 || angle === 270 || angle === -90
+
     if (isVertical) {
       this.sprite.scale.y *= -1
-      this.sprite.y = this.viewRect.height - this.sprite.y
     } else {
       this.sprite.scale.x *= -1
-      this.sprite.x = this.viewRect.width - this.sprite.x
     }
+
+    pixi_app.render()
   }
 
   rotate(angle) {
     this.sprite.angle = (this.sprite.angle + angle + 360) % 360
+
+    pixi_app.render()
   }
 
   move(offsetX, offsetY) {
     this.sprite.x += offsetX
     this.sprite.y += offsetY
+
+    pixi_app.render()
+  }
+
+  scale(scale) {
+    const newScaleX = this.sprite.scale.x * scale
+    const newScaleY = this.sprite.scale.y * scale
+
+    if (newScaleX >= this.initScale || newScaleY >= this.initScale) {
+      this.sprite.x = this.centerX + (this.sprite.x - this.centerX) * scale
+      this.sprite.y = this.centerY + (this.sprite.y - this.centerY) * scale
+      this.sprite.scale.set(newScaleX, newScaleY)
+
+      pixi_app.render()
+    }
   }
 
   reset() {
@@ -579,22 +559,32 @@ class Viewport {
     this.sprite.scale.set(this.initScale, this.initScale)
     this.sprite.angle = 0
     this.border.visible = false
+
+    pixi_app.render()
   }
 
   toggleBorder() {
     this.border.visible = !this.border.visible
+
+    pixi_app.render()
+  }
+  
+  toggleCenterMark() {
+    this.centerMark.visible = !this.centerMark.visible
+
+    pixi_app.render()
   }
 
   toggleExif() {
-    this.exif.view.visible = !this.exif.view.visible
+    this.exif.toggleView()
+
+    pixi_app.render()
   }
 
   toggleHistogram() {
-    this.histogram.view.visible = !this.histogram.view.visible
-  }
+    this.histogram.toggleView()
 
-  toggleCenterMark() {
-    this.centerMark.visible = !this.centerMark.visible
+    pixi_app.render()
   }
 
   update(sprite) {
@@ -612,12 +602,16 @@ class Viewport {
     this.tmpSprite.anchor.set(0.5)
     this.view.addChild(this.tmpSprite)
     this.histogram.update(sprite.texture)
+
+    pixi_app.render()
   }
 
   restore() {
     this.view.removeChild(this.tmpSprite)
     this.sprite.visible = true
     this.histogram.update(this.sprite.texture)
+
+    pixi_app.render()
   }
 
   initLayout() {
@@ -628,9 +622,6 @@ class Viewport {
       img.onload = async () => {
         const texture = PIXI.Texture.from(img)
         this.sprite = new PIXI.Sprite(texture)
-        if (await this.shouldApplySrgbToP3Filter(img)) {
-          this.sprite.filters = [this.srgbToP3Filter]
-        }
         this.sprite.x = this.viewRect.width / 2
         this.sprite.y = this.viewRect.height / 2
         this.initScale = Math.min(this.viewRect.width / texture.width, this.viewRect.height / texture.height)
@@ -652,36 +643,11 @@ class Viewport {
           }),
         ])
 
+        pixi_app.render()
         resolve()
       }
       img.onerror = reject
     })
-  }
-
-  async shouldApplySrgbToP3Filter(img) {
-    try {
-      const deviceSupportsP3 = window.matchMedia("(color-gamut: p3)").matches
-      debug(`Device P3 support: ${deviceSupportsP3}`)
-      if (!deviceSupportsP3) {
-        return false
-      }
-
-      const iccInfo = await exifr.parse(img, {
-        tiff: false,
-        xmp: false,
-        icc: true,
-        jfif: false,
-        iptc: false
-      })
-      const hasP3Profile = iccInfo?.ColorSpace === 'Display P3' ||
-        iccInfo?.ProfileDescription?.includes('Display P3')
-      debug(`ICC Profile support: ${hasP3Profile}`)
-
-      return deviceSupportsP3 && hasP3Profile
-    } catch (err) {
-      error('Error checking P3 filter:', err)
-      return false
-    }
   }
 }
 
@@ -724,7 +690,7 @@ const initLayout = async (imgSrcs) => {
 
 const initPIXIApp = async () => {
   pixi_app = new PIXI.Application()
-  await pixi_app.init({ background: Colors.BACKGROUND, resizeTo: window })
+  await pixi_app.init({ background: Colors.BACKGROUND, resizeTo: window, preference: 'webgl', autoStart: false })
   pixiContainer.value.appendChild(pixi_app.canvas)
 
   pixi_app.canvas.oncontextmenu = (event) => false

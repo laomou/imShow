@@ -8,7 +8,7 @@ use tauri_plugin_cli::CliExt;
 use tauri_plugin_log::Target;
 use tauri_plugin_log::TargetKind;
 
-const SUPPORTED_EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "bmp"];
+const SUPPORTED_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "webp"];
 
 fn is_supported_image(path: &Path) -> bool {
     path.is_file()
