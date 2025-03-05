@@ -12,6 +12,7 @@ import rotateRightIcon from '@/assets/rotate-right.svg'
 import flipHorizontalIcon from '@/assets/flip-horizontal.svg'
 import switchOffIcon from '@/assets/switch-off.svg'
 import switchOnIcon from '@/assets/switch-on.svg'
+import p3fragmentShader from '@/assets/p3.frag?raw'
 
 const pixiContainer = ref(null)
 let pixi_app = null
@@ -512,6 +513,13 @@ class Viewport {
     this.centerMark.visible = false
     this.centerMark.zIndex = 100
     this.view.addChild(this.centerMark)
+
+    this.srgbToP3Filter = PIXI.Filter.from({
+      gl: {
+        fragment: p3fragmentShader,
+        vertex: PIXI.defaultFilterVert
+      }
+    })
   }
 
   flip_h() {
@@ -568,7 +576,7 @@ class Viewport {
 
     pixi_app.render()
   }
-  
+
   toggleCenterMark() {
     this.centerMark.visible = !this.centerMark.visible
 
@@ -622,6 +630,10 @@ class Viewport {
       img.onload = async () => {
         const texture = PIXI.Texture.from(img)
         this.sprite = new PIXI.Sprite(texture)
+        const shouldApplyP3Filter = await this.shouldApplyP3Filter(img)
+        if (shouldApplyP3Filter) {
+          this.sprite.filters = [this.srgbToP3Filter]
+        }
         this.sprite.x = this.viewRect.width / 2
         this.sprite.y = this.viewRect.height / 2
         this.initScale = Math.min(this.viewRect.width / texture.width, this.viewRect.height / texture.height)
@@ -648,6 +660,26 @@ class Viewport {
       }
       img.onerror = reject
     })
+  }
+
+  async shouldApplyP3Filter(img) {
+    try {
+      const iccInfo = await exifr.parse(img, {
+        tiff: false,
+        xmp: false,
+        icc: true,
+        jfif: false,
+        iptc: false
+      })
+
+      const hasP3Profile = iccInfo?.ColorSpaceData === 'Display P3' ||
+        iccInfo?.ProfileDescription?.includes('Display P3')
+
+      return hasP3Profile
+    } catch (err) {
+      error(`exifr.parse ${err}`)
+      return false
+    }
   }
 }
 
